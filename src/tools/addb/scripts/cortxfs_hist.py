@@ -21,12 +21,16 @@ import argparse
 import sys
 from peewee import SqliteDatabase
 from matplotlib import pyplot as plt
+import numpy as np
 
 DB      = SqliteDatabase(None)
 BLOCK   = 16<<10
 PROC_NR = 48
 DBBATCH = 95
 PID     = 0
+rec_limit = -1
+start_opid = 0
+timesort = "NA"
 
 def db_init(path):
     DB.init(path, pragmas={
@@ -48,7 +52,10 @@ def gen_perfc_op_hist_graph(fn_tag: str="fsal_read", op_file: str="cortxfs_perfc
     ymax = 0
 
     with DB.atomic():
-        cursor = DB.execute_sql(f"SELECT DISTINCT opid from entity_states WHERE fn_tag LIKE \"{fn_tag}\" ORDER BY id ASC")
+        if rec_limit != -1:
+            cursor = DB.execute_sql(f"SELECT DISTINCT opid from entity_states WHERE fn_tag LIKE \"{fn_tag}\" AND opid >= {start_opid} ORDER BY id ASC LIMIT {rec_limit}")
+        else:
+            cursor = DB.execute_sql(f"SELECT DISTINCT opid from entity_states WHERE fn_tag LIKE \"{fn_tag}\" ORDER BY id ASC")
         field_opids = list(cursor.fetchall())
     label_opids = ("o");
     opids = [dict(zip(label_opids, f)) for f in field_opids]
@@ -82,17 +89,42 @@ def gen_perfc_op_hist_graph(fn_tag: str="fsal_read", op_file: str="cortxfs_perfc
             if ymax < time_diff:
                 ymax = time_diff
 
+    if timesort in "YES":
+        opid_time = dict(zip(xvals_opids, yvals_time))
+        opid_time1 = dict(sorted(opid_time.items(), key=lambda x: x[1]))
+        xvals_opids = list(opid_time1.keys())
+        yvals_time = list(opid_time1.values())
+
+    x = np.arange(len(xvals_opids))  # the label locations
+    width = 0.35  # the width of the bars
+
     fig, ax = plt.subplots()
-    ax.bar([idx for idx in range(len(xvals_opids))], yvals_time, align='edge', color='Red', width=0.3)
-    ax.set_xticks([idx for idx in range(len(xvals_opids))])
-    ax.set_xticklabels(xvals_opids, rotation=90, ha='center', size=3)
-    ax.set_yticklabels(yvals_time, rotation=90, ha='left', size=3)
-    fig.tight_layout()
-    fig.subplots_adjust(bottom=0.2)
+    rects1 = ax.bar(x + width/2, yvals_time, width, label='execution_time')
     plt.title(f"{fn_tag} \n time")
     plt.xlabel(f"{fn_tag} opid(s)")
     plt.ylabel("time (us)")
-    plt.tight_layout()
+    ax.set_xticks(x)
+    ax.set_xticklabels(xvals_opids, rotation=90, ha='center', size=3)
+    ax.set_yticklabels(yvals_time, rotation=90, ha='left', size=3)
+    ax.legend()
+
+    def autolabel(rects, yvals_time):
+        """Attach a text label above each bar in *rects*, displaying its height."""
+        idx = 0
+        for rect in rects:
+            height = rect.get_height()
+            text = ax.annotate(str(yvals_time[idx]).format(height),
+            xy=(rect.get_x() + rect.get_width() / 2, height),
+            xytext=(0, -30),  # 3 points vertical offset
+            textcoords="offset points",
+            ha='center', va='bottom')
+            idx=idx+1
+            text.set_rotation(90)
+            text.set_fontsize(3)
+
+    autolabel(rects1, yvals_time)
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.2)
     plt.savefig(fname=op_file, format="svg")
     print (f"Histogram graph render completed for operation {fn_tag}")
 
@@ -106,6 +138,9 @@ def parse_args():
     parser.add_argument("-d", "--db", type=str, default="cortxfs_perfc.db",
                         help="Performance database (cortxfs_perfc.db)")
     parser.add_argument("fn_tag", type=str, help="A valid fn_tag from CORTXFS stack which is enabled for performance profiling")
+    parser.add_argument("-l", "--rec_limit", type=str, default="10", help="How many max opids to be shown in a single graph, use 'NA' to specify no limit")
+    parser.add_argument("-so", "--start_opid", type=str, default="0", help="Along with limit, from which opid the graph needs to be generated. Default is 0 to show from the start")
+    parser.add_argument("-sort-by-time", "--sort_option", type=str, default="NA", help="use this to time sort the returned results incremental order, default is NA to not use this option. Use YES to activate it.")
     parser.add_argument("-o", "--op_graph", type=str, default="cortxfs_hist_graph.png",
                         help="CORTXFS fn_tag histogram graph output file (cortxfs_hist_graph.png)")
     return parser.parse_args()
@@ -114,6 +149,12 @@ if __name__ == '__main__':
     args=parse_args()
     db_init(args.db)
     db_connect()
-    print('Creating cortxfs histogram graph for fn_tag {0}, from db file {1}, o/p graph file {2}'. format(args.fn_tag, args.db, args.op_graph))
+    start_opid = int(args.start_opid)
+    if args.rec_limit not in "NA":
+        rec_limit = int(args.rec_limit)
+        print('Creating cortxfs histogram graph for fn_tag {0}, opid max limit {3} from start opid {4}, from db file {1}, time sort {5}, o/p graph file {2}'. format(args.fn_tag, args.db, args.op_graph, rec_limit, args.start_opid, args.sort_option))
+    else:
+        print('Creating cortxfs histogram graph for fn_tag {0}, from db file {1}, time sort {3}, o/p graph file {2}'. format(args.fn_tag, args.db, args.op_graph, args.sort_option))
+    timesort = args.sort_option
     gen_perfc_op_hist_graph(args.fn_tag, args.op_graph)
     db_close()
