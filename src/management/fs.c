@@ -879,6 +879,27 @@ static void fs_list_fini(struct controller_api *fs_list)
 	}
 }
 
+ static int fs_get_init(struct controller *controller,
+	struct request *request,
+	struct controller_api **api)
+{
+	return 0;
+}
+
+static void fs_get_fini(struct controller_api *fs_list)
+{
+}
+
+ static int fs_fetch_init(struct controller *controller,
+	struct request *request,
+	struct controller_api **api)
+{
+	return 0;
+}
+
+static void fs_fetch_fini(struct controller_api *fs_list)
+{
+}
 /**
  * ##############################################################
  * #		FS CONTROLLER API'S				#
@@ -910,6 +931,7 @@ static int fs_api_name_to_id(char *api_name, enum fs_api_id *api_id)
 		if (!strcmp(fs_api_table[idx].method, api_name)) {
 			*api_id = fs_api_table[idx].id;
 			rc = 0;
+			log_debug("\n\n%s and %s\n\n", fs_api_table[idx].method, api_name);
 			break;
 		}
 	}

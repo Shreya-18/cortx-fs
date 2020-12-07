@@ -73,7 +73,9 @@ enum controller_type {
 #define FS_API_MAP(XX)					\
 	XX(CREATE,	create,		PUT)		\
 	XX(DELETE,	delete,		DELETE)		\
-	XX(LIST,	list,		GET)
+	XX(GET,		get,		GET)		\
+	XX(LIST,	list,		GET)		\
+	XX(FETCH,	fetch,		GET)
 
 enum fs_api_id {
 #define XX(uc, lc, _)	FS_ ## uc ## _ID,
